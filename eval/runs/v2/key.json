@@ -1,0 +1,18 @@
+{
+ "D1": {
+  "1": "skill",
+  "2": "baseline"
+ },
+ "D2": {
+  "1": "baseline",
+  "2": "skill"
+ },
+ "D3": {
+  "1": "skill",
+  "2": "baseline"
+ },
+ "D4": {
+  "1": "baseline",
+  "2": "skill"
+ }
+}
