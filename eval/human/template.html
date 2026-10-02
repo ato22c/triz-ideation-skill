@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A/B 블라인드 평가</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1c2230; --muted:#667085; --line:#dfe3ea;
+  --a:#2563eb; --a-soft:#e8f0ff; --b:#d9480f; --b-soft:#fff0e8; --ok:#16794a; --ok-soft:#e6f6ee;
+  --accent:#4f46e5; --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 14px rgba(16,24,40,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10131a; --card:#171b24; --ink:#e8ebf2; --muted:#98a2b3; --line:#2a3040;
+    --a:#7aa2ff; --a-soft:#1b2744; --b:#ff9a6b; --b-soft:#3a2418; --ok:#5fd29a; --ok-soft:#123424;
+    --accent:#8b86ff; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10131a; --card:#171b24; --ink:#e8ebf2; --muted:#98a2b3; --line:#2a3040;
+  --a:#7aa2ff; --a-soft:#1b2744; --b:#ff9a6b; --b-soft:#3a2418; --ok:#5fd29a; --ok-soft:#123424;
+  --accent:#8b86ff; --shadow:none;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 96px}
+header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.top h1{font-size:16px;margin:0;font-weight:700;letter-spacing:-.01em}
+.progress{flex:1;min-width:140px;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+.bar{flex:1;height:6px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:99px;padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+.chip[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+.chip.done::after{content:" ✓";color:var(--ok);font-weight:700}
+.theme{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:13px;font-family:inherit}
+.problem{margin:20px 0 14px;padding:16px 18px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.problem small{color:var(--muted);display:block;margin-bottom:4px;font-size:12px;letter-spacing:.02em}
+.problem p{margin:0;font-size:17px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.col{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);min-width:0}
+.col>h2{margin:0;padding:10px 16px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.col.A>h2{background:var(--a-soft);color:var(--a)} .col.B>h2{background:var(--b-soft);color:var(--b)}
+.col h2 span{font-size:12px;font-weight:400;opacity:.8}
+.md{padding:6px 18px 18px;overflow-wrap:anywhere;font-size:15px}
+.md h1,.md h2,.md h3,.md h4{line-height:1.35;margin:1.2em 0 .4em}
+.md h1{font-size:19px}.md h2{font-size:17px}.md h3{font-size:15.5px}.md h4{font-size:15px}
+.md ul,.md ol{padding-left:1.3em}.md li{margin:.2em 0}
+.md code{background:color-mix(in srgb,var(--line) 60%,transparent);padding:.1em .35em;border-radius:5px;font-size:.92em}
+.md pre{background:color-mix(in srgb,var(--line) 50%,transparent);padding:10px 12px;border-radius:8px;overflow:auto;white-space:pre-wrap}
+.md pre code{background:none;padding:0}
+.md table{border-collapse:collapse;width:100%;font-size:13.5px;display:block;overflow:auto}
+.md th,.md td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+.md blockquote{margin:.8em 0;padding:.1em 1em;border-left:3px solid var(--line);color:var(--muted)}
+.md hr{border:0;border-top:1px solid var(--line);margin:1.2em 0}
+.eval{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow)}
+.eval h3{margin:0 0 10px;font-size:16px}
+.winner{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.pick{flex:1;min-width:120px;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);padding:12px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit}
+.pick[data-v="A"][aria-pressed="true"]{border-color:var(--a);background:var(--a-soft);color:var(--a)}
+.pick[data-v="B"][aria-pressed="true"]{border-color:var(--b);background:var(--b-soft);color:var(--b)}
+.pick[data-v="tie"][aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+.rtable{width:100%;border-collapse:collapse;margin:8px 0 14px}
+.rtable th{font-weight:600;text-align:left;font-size:13px;color:var(--muted);padding:4px 6px}
+.rtable td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:middle}
+.crit{font-size:14px}.crit small{display:block;color:var(--muted);font-size:12px}
+.stars{display:flex;gap:4px}
+.st{width:34px;height:34px;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px;cursor:pointer;font-size:14px;font-family:inherit}
+.st[aria-pressed="true"]{color:#fff;border-color:transparent}
+.A-col .st[aria-pressed="true"]{background:var(--a)} .B-col .st[aria-pressed="true"]{background:var(--b)}
+textarea{width:100%;min-height:76px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);padding:10px;font:inherit;resize:vertical}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:14px}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:10px 16px;font-size:15px;cursor:pointer;font-family:inherit}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.result{margin-top:22px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow)}
+.result h2{margin:0 0 6px;font-size:18px}
+.res-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:12px 0}
+.kpi{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px}
+.kpi b{display:block;font-size:26px;line-height:1.2}.kpi span{color:var(--muted);font-size:13px}
+.kpi.skill b{color:var(--ok)}
+.rev{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+.rev th,.rev td{border-top:1px solid var(--line);padding:7px 6px;text-align:left}
+.badge{display:inline-block;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700}
+.badge.skill{background:var(--ok-soft);color:var(--ok)}.badge.base{background:var(--line);color:var(--muted)}
+.saved{font-size:12px;color:var(--muted)}
+.intro{margin:20px 0 0;padding:14px 18px;background:var(--card);border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:14px}
+.intro b{color:var(--ink)}
+@media (max-width:820px){
+  .cols{grid-template-columns:1fr}
+  .tabs-m{display:flex}
+  .col.hidden-m{display:none}
+}
+.tabs-m{display:none;gap:8px;margin-bottom:10px;position:sticky;top:56px;z-index:10}
+.tabs-m button{flex:1;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-family:inherit;font-size:15px}
+.tabs-m button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.st:focus-visible,.pick:focus-visible,.btn:focus-visible,.chip:focus-visible,textarea:focus-visible,.tabs-m button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <h1>A/B 블라인드 평가</h1>
+  <div class="progress"><span id="pcount">0/0</span><div class="bar"><i id="pbar"></i></div><span class="saved" id="saved"></span></div>
+  <div class="chips" id="chips"></div>
+  <button class="theme" id="theme" type="button" aria-label="화면 밝기 전환">◐</button>
+</div></header>
+
+<main class="wrap">
+  <div class="intro"><b>어떻게 하나요?</b> 문제마다 <b>답안 A</b>와 <b>답안 B</b>를 읽고, 더 도움이 되는 쪽을 고른 뒤 항목별 별점(1~5)을 매겨주세요.
+  어느 쪽이 스킬을 쓴 답인지는 <b>모두 끝낸 뒤</b>에 공개됩니다. 답안은 기능·길이가 다를 수 있으니, 길이가 아니라 <b>내게 얼마나 쓸모 있었는지</b>로 판단해 주세요.
+  입력은 이 브라우저에 자동 저장됩니다.</div>
+  <div id="view"></div>
+  <div id="result"></div>
+</main>
+
+<script>__MARKED__</script>
+<script id="data" type="application/json">__DATA__</script>
+<script id="key" type="application/json">__KEY__</script>
+<script>
+(function(){
+"use strict";
+var PAIRS = JSON.parse(document.getElementById('data').textContent);
+var KEYB64 = JSON.parse(document.getElementById('key').textContent);
+var CRIT = [
+  {id:'new',  t:'새로움',      s:'처음 보는, 뻔하지 않은 아이디어가 있었다'},
+  {id:'do',   t:'실행 가능성', s:'내일 당장 해볼 수 있는 것이 있다'},
+  {id:'read', t:'이해하기 쉬움', s:'읽고 바로 이해되고 결정할 수 있다'},
+  {id:'fit',  t:'내 문제에 맞음', s:'상황의 핵심을 짚고 있다'}
+];
+var STORE = 'triz-human-eval-v1';
+var state = {idx:0, ans:{}};
+var mobileTab = 'A';
+
+function load(){ try{ var r=localStorage.getItem(STORE); if(r){ var s=JSON.parse(r); if(s&&s.ans){state=s;} } }catch(e){} }
+function save(){ try{ localStorage.setItem(STORE, JSON.stringify(state)); flash('저장됨'); }catch(e){ flash('자동 저장 불가 — 마지막에 꼭 내보내기를 눌러주세요'); } }
+var ft; function flash(t){ var el=document.getElementById('saved'); el.textContent=t; clearTimeout(ft); ft=setTimeout(function(){el.textContent='';},1800); }
+function md(s){ try{ return window.marked ? window.marked.parse(s,{gfm:true,breaks:false}) : '<pre>'+esc(s)+'</pre>'; }catch(e){ return '<pre>'+esc(s)+'</pre>'; } }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function cur(){ var p=PAIRS[state.idx]; if(!state.ans[p.id]) state.ans[p.id]={winner:null,r:{A:{},B:{}},c:''}; return state.ans[p.id]; }
+function isDone(id){ var a=state.ans[id]; if(!a||!a.winner) return false; for(var i=0;i<CRIT.length;i++){ if(!a.r.A[CRIT[i].id]||!a.r.B[CRIT[i].id]) return false; } return true; }
+function doneCount(){ return PAIRS.filter(function(p){return isDone(p.id);}).length; }
+
+function renderChips(){
+  var c=document.getElementById('chips'); c.innerHTML='';
+  PAIRS.forEach(function(p,i){
+    var b=document.createElement('button'); b.type='button'; b.className='chip'+(isDone(p.id)?' done':''); b.textContent='문제 '+(i+1);
+    if(i===state.idx) b.setAttribute('aria-current','true');
+    b.onclick=function(){ state.idx=i; save(); render(); window.scrollTo({top:0}); };
+    c.appendChild(b);
+  });
+  var n=doneCount(); document.getElementById('pcount').textContent=n+'/'+PAIRS.length+' 완료';
+  document.getElementById('pbar').style.width=(100*n/PAIRS.length)+'%';
+}
+
+function render(){
+  renderChips();
+  var p=PAIRS[state.idx], a=cur(), v=document.getElementById('view');
+  v.innerHTML='';
+  var prob=el('section','problem'); prob.innerHTML='<small>문제 '+(state.idx+1)+' / '+PAIRS.length+' · '+esc(p.domain)+'</small><p>'+esc(p.problem)+'</p>';
+  v.appendChild(prob);
+
+  var tabs=el('div','tabs-m'); ['A','B'].forEach(function(k){
+    var b=el('button'); b.type='button'; b.textContent='답안 '+k; b.setAttribute('aria-pressed',String(mobileTab===k));
+    b.onclick=function(){ mobileTab=k; render(); }; tabs.appendChild(b); });
+  v.appendChild(tabs);
+
+  var cols=el('div','cols');
+  ['A','B'].forEach(function(k){
+    var c=el('article','col '+k+(mobileTab!==k?' hidden-m':''));
+    c.innerHTML='<h2>답안 '+k+'<span>'+(p[k].length.toLocaleString())+'자</span></h2><div class="md">'+md(p[k])+'</div>';
+    cols.appendChild(c);
+  });
+  v.appendChild(cols);
+
+  var ev=el('section','eval');
+  ev.innerHTML='<h3>1. 어느 쪽이 더 도움이 되나요?</h3>';
+  var w=el('div','winner');
+  [['A','답안 A'],['B','답안 B'],['tie','비슷함']].forEach(function(o){
+    var b=el('button','pick'); b.type='button'; b.dataset.v=o[0]; b.textContent=o[1]; b.setAttribute('aria-pressed',String(a.winner===o[0]));
+    b.onclick=function(){ a.winner=o[0]; save(); render(); }; w.appendChild(b); });
+  ev.appendChild(w);
+  var hint=el('p','hint'); hint.textContent='읽은 느낌 그대로 고르세요. 길이가 아니라 내 문제에 실제로 쓸모 있었는지가 기준입니다.'; ev.appendChild(hint);
+
+  var h2=el('h3'); h2.textContent='2. 항목별 별점 (1 = 아쉬움, 5 = 매우 좋음)'; ev.appendChild(h2);
+  var t=el('table','rtable'); var thead='<tr><th>항목</th><th>답안 A</th><th>답안 B</th></tr>'; t.innerHTML='<thead>'+thead+'</thead>';
+  var tb=el('tbody');
+  CRIT.forEach(function(cr){
+    var tr=el('tr'); var td0=el('td','crit'); td0.innerHTML=esc(cr.t)+'<small>'+esc(cr.s)+'</small>'; tr.appendChild(td0);
+    ['A','B'].forEach(function(k){
+      var td=el('td',k+'-col'); var st=el('div','stars');
+      for(var n=1;n<=5;n++){ (function(n){
+        var b=el('button','st'); b.type='button'; b.textContent=n; b.setAttribute('aria-label',cr.t+' 답안 '+k+' '+n+'점');
+        b.setAttribute('aria-pressed',String(a.r[k][cr.id]===n));
+        b.onclick=function(){ a.r[k][cr.id]=n; save(); render(); }; st.appendChild(b); })(n); }
+      td.appendChild(st); tr.appendChild(td); });
+    tb.appendChild(tr); });
+  t.appendChild(tb); ev.appendChild(t);
+
+  var h3=el('h3'); h3.textContent='3. 한마디 (선택) — 해보고 싶은 아이디어, 이상했던 점 등'; ev.appendChild(h3);
+  var ta=el('textarea'); ta.value=a.c||''; ta.setAttribute('aria-label','코멘트');
+  ta.oninput=function(){ a.c=ta.value; save(); }; ev.appendChild(ta);
+
+  var nav=el('div','nav');
+  var prev=el('button','btn'); prev.type='button'; prev.textContent='← 이전'; prev.disabled=state.idx===0;
+  prev.onclick=function(){ state.idx--; save(); render(); window.scrollTo({top:0}); };
+  var next=el('button','btn primary'); next.type='button';
+  var last=state.idx===PAIRS.length-1;
+  next.textContent=last?'결과 보기':'다음 →';
+  next.disabled=!isDone(p.id);
+  next.title=isDone(p.id)?'':'승자 선택과 8개 별점을 모두 채우면 넘어갈 수 있어요';
+  next.onclick=function(){ if(last){ showResult(); } else { state.idx++; save(); render(); window.scrollTo({top:0}); } };
+  nav.appendChild(prev); nav.appendChild(next); ev.appendChild(nav);
+  v.appendChild(ev);
+  if(doneCount()===PAIRS.length) showResult(true); else document.getElementById('result').innerHTML='';
+}
+
+function el(tag,cls){ var e=document.createElement(tag); if(cls) e.className=cls; return e; }
+
+function key(){ try{ return JSON.parse(decodeURIComponent(escape(atob(KEYB64)))); }catch(e){ return null; } }
+function cond(pid,slot){ var k=key(); return k&&k[pid]?k[pid][slot]:null; }
+
+function rows(){
+  return PAIRS.map(function(p){
+    var a=state.ans[p.id]||{r:{A:{},B:{}}};
+    var r={id:p.id, domain:p.domain, winner:a.winner, A_is:cond(p.id,'A'), B_is:cond(p.id,'B'), comment:a.c||''};
+    ['A','B'].forEach(function(k){ CRIT.forEach(function(c){ r[k+'_'+c.id]=a.r&&a.r[k]?a.r[k][c.id]||'':''; }); });
+    r.winner_is = a.winner==='tie'?'tie':(a.winner? cond(p.id,a.winner):'');
+    return r; });
+}
+function download(name,text,type){ var b=new Blob([text],{type:type}); var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(u);},500); }
+function toCSV(rs){ if(!rs.length) return ''; var cols=Object.keys(rs[0]); var q=function(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  return '﻿'+[cols.join(',')].concat(rs.map(function(r){ return cols.map(function(c){return q(r[c]);}).join(','); })).join('\n'); }
+
+function avg(a){ return a.length? (a.reduce(function(x,y){return x+y;},0)/a.length):0; }
+function showResult(auto){
+  var box=document.getElementById('result'); var rs=rows();
+  var wins={skill:0,base:0,tie:0};
+  rs.forEach(function(r){ if(r.winner_is==='tie') wins.tie++; else if(r.winner_is==='skill') wins.skill++; else if(r.winner_is==='base') wins.base++; });
+  var sc={skill:{},base:{}}; CRIT.forEach(function(c){ sc.skill[c.id]=[]; sc.base[c.id]=[]; });
+  rs.forEach(function(r){ ['A','B'].forEach(function(k){ var who=r[k+'_is']; CRIT.forEach(function(c){ var v=r[k+'_'+c.id]; if(v) sc[who][c.id].push(v); }); }); });
+  var html='<div class="result"><h2>평가 완료 🎉</h2><div class="saved" style="margin-bottom:8px">이제 정답이 공개됩니다. 아래에서 결과 파일을 저장하세요.</div>';
+  html+='<div class="res-grid"><div class="kpi skill"><b>'+wins.skill+'</b><span>스킬 답안이 이긴 문제</span></div><div class="kpi"><b>'+wins.base+'</b><span>스킬 없는 답안이 이긴 문제</span></div><div class="kpi"><b>'+wins.tie+'</b><span>비슷함</span></div></div>';
+  html+='<table class="rev"><thead><tr><th>항목</th><th>스킬 평균</th><th>스킬 없음 평균</th><th>차이</th></tr></thead><tbody>';
+  CRIT.forEach(function(c){ var s=avg(sc.skill[c.id]), b=avg(sc.base[c.id]); var d=s-b;
+    html+='<tr><td>'+esc(c.t)+'</td><td>'+s.toFixed(2)+'</td><td>'+b.toFixed(2)+'</td><td>'+(d>0?'+':'')+d.toFixed(2)+'</td></tr>'; });
+  html+='</tbody></table>';
+  html+='<table class="rev"><thead><tr><th>문제</th><th>A는</th><th>B는</th><th>내 선택</th></tr></thead><tbody>';
+  rs.forEach(function(r,i){ var f=function(x){return x==='skill'?'<span class="badge skill">스킬</span>':'<span class="badge base">스킬 없음</span>';};
+    html+='<tr><td>문제 '+(i+1)+' · '+esc(r.domain)+'</td><td>'+f(r.A_is)+'</td><td>'+f(r.B_is)+'</td><td>'+(r.winner==='tie'?'비슷함':f(r.winner_is))+'</td></tr>'; });
+  html+='</tbody></table>';
+  html+='<div class="nav" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn primary" id="xj" type="button">JSON 저장</button><button class="btn" id="xc" type="button">CSV 저장</button><button class="btn" id="xr" type="button">처음부터 다시</button></div>';
+  html+='<p class="hint" style="margin-top:10px">별점은 1~5점이며 4문제 이상이면 경향을 볼 수 있지만, 사람 수가 적으면 우연일 수 있어요. 가능하면 여러 사람이 각자 평가해 파일을 모아 비교하세요.</p></div>';
+  box.innerHTML=html;
+  document.getElementById('xj').onclick=function(){ download('human-eval-result.json',JSON.stringify(rs,null,2),'application/json'); };
+  document.getElementById('xc').onclick=function(){ download('human-eval-result.csv',toCSV(rs),'text/csv;charset=utf-8'); };
+  document.getElementById('xr').onclick=function(){ if(confirm('입력한 평가를 모두 지우고 처음부터 다시 할까요?')){ state={idx:0,ans:{}}; save(); render(); window.scrollTo({top:0}); } };
+  if(!auto) box.scrollIntoView({behavior:'smooth'});
+}
+
+(function theme(){
+  var b=document.getElementById('theme'); var root=document.documentElement;
+  try{ var t=localStorage.getItem('triz-human-theme'); if(t) root.setAttribute('data-theme',t); }catch(e){}
+  b.onclick=function(){ var dark=getComputedStyle(root).getPropertyValue('--bg').trim()==='#10131a'; var n=dark?'light':'dark'; root.setAttribute('data-theme',n); try{localStorage.setItem('triz-human-theme',n);}catch(e){} };
+})();
+
+load(); if(state.idx>=PAIRS.length||state.idx<0) state.idx=0; render();
+})();
+</script>
+</body>
+</html>
