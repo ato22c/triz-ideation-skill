@@ -41,7 +41,8 @@ def extra_pairs():
         if not all(f.exists() for f in need):
             print(f"skip {d.name}: problem.txt/baseline.md/skill.md 필요")
             continue
-        out.append({"id": d.name, "domain": "직접 추가", "problem": read(need[0]),
+        known = {p["id"]: p["domain"] for p in json.loads((EVAL / "problems.json").read_text(encoding="utf-8"))}
+        out.append({"id": d.name, "domain": known.get(d.name, "직접 추가"), "problem": read(need[0]),
                     "base": read(need[1]), "skill": read(need[2])})
     return out
 
@@ -49,10 +50,12 @@ def extra_pairs():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--round", default="1", help="평가 회차. 저장 키·내려받는 파일명·출력 파일명에 쓰인다")
+    ap.add_argument("--only-extra", action="store_true", help="pairs/ 의 쌍만 넣는다(기본 6문제 제외)")
     args = ap.parse_args()
     rng = random.Random(args.seed)
 
-    pairs = default_pairs() + extra_pairs()
+    pairs = (extra_pairs() if args.only_extra else default_pairs() + extra_pairs())
     rng.shuffle(pairs)  # 문제 순서도 섞어 앞부분 학습효과를 줄인다
     data, key = [], {}
     for p in pairs:
@@ -68,8 +71,8 @@ def main():
     key_b64 = base64.b64encode(json.dumps(key).encode("utf-8")).decode("ascii")
     html = (HERE / "template.html").read_text(encoding="utf-8")
     html = html.replace("__MARKED__", (HERE / "marked.min.js").read_text(encoding="utf-8").replace("</script", "<\\/script"))
-    html = html.replace("__DATA__", js(data)).replace("__KEY__", js(key_b64))
-    out = HERE / "index.html"
+    html = html.replace("__DATA__", js(data)).replace("__KEY__", js(key_b64)).replace("__ROUND__", str(args.round))
+    out = HERE / ("index.html" if args.round == "1" else f"index-r{args.round}.html")
     out.write_text(html, encoding="utf-8")
     print(f"built {out}  ({len(data)} problems, {out.stat().st_size // 1024} KB)")
 

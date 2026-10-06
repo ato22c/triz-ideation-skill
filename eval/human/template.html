@@ -131,7 +131,7 @@ var CRIT = [
   {id:'read', t:'이해하기 쉬움', s:'읽고 바로 이해되고 결정할 수 있다'},
   {id:'fit',  t:'내 문제에 맞음', s:'상황의 핵심을 짚고 있다'}
 ];
-var STORE = 'triz-human-eval-v1';
+var STORE = 'triz-human-eval-r__ROUND__';
 var state = {idx:0, ans:{}};
 var mobileTab = 'A';
 
@@ -255,8 +255,8 @@ function showResult(auto){
   html+='<div class="nav" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn primary" id="xj" type="button">JSON 저장</button><button class="btn" id="xc" type="button">CSV 저장</button><button class="btn" id="xr" type="button">처음부터 다시</button></div>';
   html+='<p class="hint" style="margin-top:10px">별점은 1~5점이며 4문제 이상이면 경향을 볼 수 있지만, 사람 수가 적으면 우연일 수 있어요. 가능하면 여러 사람이 각자 평가해 파일을 모아 비교하세요.</p></div>';
   box.innerHTML=html;
-  document.getElementById('xj').onclick=function(){ download('human-eval-result.json',JSON.stringify(rs,null,2),'application/json'); };
-  document.getElementById('xc').onclick=function(){ download('human-eval-result.csv',toCSV(rs),'text/csv;charset=utf-8'); };
+  document.getElementById('xj').onclick=function(){ download('human-eval-result-__ROUND__.json',JSON.stringify(rs,null,2),'application/json'); };
+  document.getElementById('xc').onclick=function(){ download('human-eval-result-__ROUND__.csv',toCSV(rs),'text/csv;charset=utf-8'); };
   document.getElementById('xr').onclick=function(){ if(confirm('입력한 평가를 모두 지우고 처음부터 다시 할까요?')){ state={idx:0,ans:{}}; save(); render(); window.scrollTo({top:0}); } };
   if(!auto) box.scrollIntoView({behavior:'smooth'});
 }
