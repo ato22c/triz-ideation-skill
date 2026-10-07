@@ -51,6 +51,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--round", default="1", help="평가 회차. 저장 키·내려받는 파일명·출력 파일명에 쓰인다")
+    ap.add_argument("--reply-to", default="", help="결과 메일 버튼의 받는 사람(비우면 직접 입력)")
+    ap.add_argument("--out", default=None, help="출력 파일 경로(기본: eval/human/index[-r<회차>].html)")
     ap.add_argument("--only-extra", action="store_true", help="pairs/ 의 쌍만 넣는다(기본 6문제 제외)")
     args = ap.parse_args()
     rng = random.Random(args.seed)
@@ -58,9 +60,11 @@ def main():
     pairs = (extra_pairs() if args.only_extra else default_pairs() + extra_pairs())
     rng.shuffle(pairs)  # 문제 순서도 섞어 앞부분 학습효과를 줄인다
     data, key = [], {}
-    for p in pairs:
-        order = ["base", "skill"]
-        rng.shuffle(order)
+    # A/B 위치 편향을 줄이려고 "스킬이 A인 문제"와 "B인 문제"를 절반씩 배정한다(어느 문제가 어느 쪽인지만 무작위)
+    skill_first = [True] * ((len(pairs) + 1) // 2) + [False] * (len(pairs) // 2)
+    rng.shuffle(skill_first)
+    for p, sf in zip(pairs, skill_first):
+        order = ["skill", "base"] if sf else ["base", "skill"]
         key[p["id"]] = {"A": order[0], "B": order[1]}
         data.append({"id": p["id"], "domain": p["domain"], "problem": p["problem"],
                      "A": p[order[0]], "B": p[order[1]]})
@@ -71,8 +75,9 @@ def main():
     key_b64 = base64.b64encode(json.dumps(key).encode("utf-8")).decode("ascii")
     html = (HERE / "template.html").read_text(encoding="utf-8")
     html = html.replace("__MARKED__", (HERE / "marked.min.js").read_text(encoding="utf-8").replace("</script", "<\\/script"))
-    html = html.replace("__DATA__", js(data)).replace("__KEY__", js(key_b64)).replace("__ROUND__", str(args.round))
-    out = HERE / ("index.html" if args.round == "1" else f"index-r{args.round}.html")
+    html = html.replace("__DATA__", js(data)).replace("__KEY__", js(key_b64)).replace("__ROUND__", str(args.round)).replace("__CFG__", js({"replyTo": args.reply_to}))
+    out = Path(args.out) if args.out else HERE / ("index.html" if args.round == "1" else f"index-r{args.round}.html")
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
     print(f"built {out}  ({len(data)} problems, {out.stat().st_size // 1024} KB)")
 

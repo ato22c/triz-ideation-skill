@@ -111,14 +111,16 @@ textarea{width:100%;min-height:76px;border:1px solid var(--line);border-radius:1
 
 <main class="wrap">
   <div class="intro"><b>어떻게 하나요?</b> 문제마다 <b>답안 A</b>와 <b>답안 B</b>를 읽고, 더 도움이 되는 쪽을 고른 뒤 항목별 별점(1~5)을 매겨주세요.
-  어느 쪽이 스킬을 쓴 답인지는 <b>모두 끝낸 뒤</b>에 공개됩니다. 답안은 기능·길이가 다를 수 있으니, 길이가 아니라 <b>내게 얼마나 쓸모 있었는지</b>로 판단해 주세요.
-  입력은 이 브라우저에 자동 저장됩니다.</div>
+  어느 쪽이 어떤 방식으로 만든 답인지는 <b>모두 끝낸 뒤</b>에 공개됩니다. 답안은 기능·길이가 다를 수 있으니, 길이가 아니라 <b>내게 얼마나 쓸모 있었는지</b>로 판단해 주세요.
+  입력은 이 브라우저에 자동 저장됩니다.
+  <div style="margin-top:10px"><label>이름(선택) <input id="rater" type="text" maxlength="40" autocomplete="off" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--bg);color:var(--ink);font:inherit;width:200px"></label> <span class="saved">결과 파일 이름에 붙고, 누구 결과인지 구분하는 데만 써요</span></div></div>
   <div id="view"></div>
   <div id="result"></div>
 </main>
 
 <script>__MARKED__</script>
 <script id="data" type="application/json">__DATA__</script>
+<script id="cfg" type="application/json">__CFG__</script>
 <script id="key" type="application/json">__KEY__</script>
 <script>
 (function(){
@@ -132,7 +134,8 @@ var CRIT = [
   {id:'fit',  t:'내 문제에 맞음', s:'상황의 핵심을 짚고 있다'}
 ];
 var STORE = 'triz-human-eval-r__ROUND__';
-var state = {idx:0, ans:{}};
+var state = {idx:0, ans:{}, name:''};
+var REPLYTO = JSON.parse(document.getElementById('cfg').textContent).replyTo || '';
 var mobileTab = 'A';
 
 function load(){ try{ var r=localStorage.getItem(STORE); if(r){ var s=JSON.parse(r); if(s&&s.ans){state=s;} } }catch(e){} }
@@ -226,7 +229,7 @@ function cond(pid,slot){ var k=key(); return k&&k[pid]?k[pid][slot]:null; }
 function rows(){
   return PAIRS.map(function(p){
     var a=state.ans[p.id]||{r:{A:{},B:{}}};
-    var r={id:p.id, domain:p.domain, winner:a.winner, A_is:cond(p.id,'A'), B_is:cond(p.id,'B'), comment:a.c||''};
+    var r={rater:state.name||'', id:p.id, domain:p.domain, winner:a.winner, A_is:cond(p.id,'A'), B_is:cond(p.id,'B'), comment:a.c||''};
     ['A','B'].forEach(function(k){ CRIT.forEach(function(c){ r[k+'_'+c.id]=a.r&&a.r[k]?a.r[k][c.id]||'':''; }); });
     r.winner_is = a.winner==='tie'?'tie':(a.winner? cond(p.id,a.winner):'');
     return r; });
@@ -235,6 +238,24 @@ function download(name,text,type){ var b=new Blob([text],{type:type}); var u=URL
 function toCSV(rs){ if(!rs.length) return ''; var cols=Object.keys(rs[0]); var q=function(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   return '﻿'+[cols.join(',')].concat(rs.map(function(r){ return cols.map(function(c){return q(r[c]);}).join(','); })).join('\n'); }
 
+function fname(ext){
+  var n=(state.name||'').replace(/[\\/:*?"<>|\s]+/g,'_').replace(/^_+|_+$/g,'');
+  return 'human-eval-result-__ROUND__'+(n?'-'+n:'')+'.'+ext;
+}
+function mailHref(rs){
+  var who=state.name||'(이름 없음)';
+  var NL='\n';
+  var lines=rs.map(function(r){
+    var pick=r.winner==='tie'?'비슷함':(r.winner+'('+r.winner_is+')');
+    var A=CRIT.map(function(c){return r['A_'+c.id];}).join(',');
+    var B=CRIT.map(function(c){return r['B_'+c.id];}).join(',');
+    var memo=r.comment?(' | '+r.comment.replace(/\s+/g,' ')):'';
+    return r.id+' | A='+r.A_is+' B='+r.B_is+' | 선택='+pick+' | A['+A+'] B['+B+']'+memo;
+  });
+  var body='평가자: '+who+NL+'별점 순서: 새로움, 실행 가능성, 이해하기 쉬움, 내 문제에 맞음'+NL+NL+lines.join(NL)+NL+NL+'(저장한 JSON 파일을 첨부해 주세요)';
+  var to=REPLYTO?encodeURIComponent(REPLYTO).replace('%40','@'):'';
+  return 'mailto:'+to+'?subject='+encodeURIComponent('AI 답변 비교 평가 결과 - '+who)+'&body='+encodeURIComponent(body);
+}
 function avg(a){ return a.length? (a.reduce(function(x,y){return x+y;},0)/a.length):0; }
 function showResult(auto){
   var box=document.getElementById('result'); var rs=rows();
@@ -252,12 +273,13 @@ function showResult(auto){
   rs.forEach(function(r,i){ var f=function(x){return x==='skill'?'<span class="badge skill">스킬</span>':'<span class="badge base">스킬 없음</span>';};
     html+='<tr><td>문제 '+(i+1)+' · '+esc(r.domain)+'</td><td>'+f(r.A_is)+'</td><td>'+f(r.B_is)+'</td><td>'+(r.winner==='tie'?'비슷함':f(r.winner_is))+'</td></tr>'; });
   html+='</tbody></table>';
-  html+='<div class="nav" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn primary" id="xj" type="button">JSON 저장</button><button class="btn" id="xc" type="button">CSV 저장</button><button class="btn" id="xr" type="button">처음부터 다시</button></div>';
+  html+='<div class="nav" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn primary" id="xj" type="button">JSON 저장</button><button class="btn" id="xc" type="button">CSV 저장</button><a class="btn" id="xm" href="#" style="text-decoration:none">결과 메일로 보내기</a><button class="btn" id="xr" type="button">처음부터 다시</button></div><p class="hint" style="margin-top:8px">메일 버튼은 요약만 채워 줍니다. <b>먼저 JSON 저장을 누른 뒤, 그 파일을 메일에 첨부</b>해 주세요.</p>';
   html+='<p class="hint" style="margin-top:10px">별점은 1~5점이며 4문제 이상이면 경향을 볼 수 있지만, 사람 수가 적으면 우연일 수 있어요. 가능하면 여러 사람이 각자 평가해 파일을 모아 비교하세요.</p></div>';
   box.innerHTML=html;
-  document.getElementById('xj').onclick=function(){ download('human-eval-result-__ROUND__.json',JSON.stringify(rs,null,2),'application/json'); };
-  document.getElementById('xc').onclick=function(){ download('human-eval-result-__ROUND__.csv',toCSV(rs),'text/csv;charset=utf-8'); };
-  document.getElementById('xr').onclick=function(){ if(confirm('입력한 평가를 모두 지우고 처음부터 다시 할까요?')){ state={idx:0,ans:{}}; save(); render(); window.scrollTo({top:0}); } };
+  document.getElementById('xj').onclick=function(){ download(fname('json'),JSON.stringify(rs,null,2),'application/json'); };
+  document.getElementById('xc').onclick=function(){ download(fname('csv'),toCSV(rs),'text/csv;charset=utf-8'); };
+  document.getElementById('xm').href=mailHref(rs);
+  document.getElementById('xr').onclick=function(){ if(confirm('입력한 평가를 모두 지우고 처음부터 다시 할까요?')){ state={idx:0,ans:{},name:state.name||''}; save(); render(); window.scrollTo({top:0}); } };
   if(!auto) box.scrollIntoView({behavior:'smooth'});
 }
 
@@ -267,7 +289,9 @@ function showResult(auto){
   b.onclick=function(){ var dark=getComputedStyle(root).getPropertyValue('--bg').trim()==='#10131a'; var n=dark?'light':'dark'; root.setAttribute('data-theme',n); try{localStorage.setItem('triz-human-theme',n);}catch(e){} };
 })();
 
-load(); if(state.idx>=PAIRS.length||state.idx<0) state.idx=0; render();
+load(); if(state.idx>=PAIRS.length||state.idx<0) state.idx=0;
+var rin=document.getElementById('rater'); rin.value=state.name||''; rin.oninput=function(){ state.name=rin.value; save(); };
+render();
 })();
 </script>
 </body>
